@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Générateur de QR Codes 2D-DOC</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .qrcodes-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .qrcode-wrapper {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .qrcode-label {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #333;
+        }
+        .download-button {
+            margin-top: 10px;
+            background-color: #2196F3;
+        }
+        .download-button:hover {
+            background-color: #1976D2;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        .error-message {
+            color: #d32f2f;
+            margin: 10px 0;
+            display: none;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input[type="file"] {
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .loading {
+            display: none;
+            margin: 10px 0;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Générateur de QR Codes 2D-DOC</h1>
+        
+        <div class="input-group">
+            <input type="file" id="pdfFile" accept=".pdf">
+            <div id="errorMessage" class="error-message"></div>
+            <div id="loading" class="loading">Génération des QR codes en cours...</div>
+            <button onclick="generateQRCodes()">Générer QR Codes</button>
+        </div>
+        
+        <div id="qrcodes" class="qrcodes-container"></div>
+    </div>
+
+    <script>
+        const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB limite maximale
+        const CHUNK_SIZE = 6 * 1024 * 1024; // 6MB par QR code
+
+        async function generateQRCodes() {
+            const fileInput = document.getElementById('pdfFile');
+            const file = fileInput.files[0];
+            const errorMessage = document.getElementById('errorMessage');
+            const loading = document.getElementById('loading');
+            
+            if (!file) {
+                showError('Veuillez sélectionner un fichier PDF');
+                return;
+            }
+
+            if (file.size > MAX_FILE_SIZE) {
+                showError(`Le fichier est trop volumineux. La taille maximale est de 25 Mo.`);
+                return;
+            }
+
+            hideError();
+            loading.style.display = 'block';
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            const qrcodesContainer = document.getElementById('qrcodes');
+            qrcodesContainer.innerHTML = '';
+
+            for (let i = 0; i < totalChunks; i++) {
+                const start = i * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
+                
+                const wrapper = document.createElement('div');
+                wrapper.className = 'qrcode-wrapper';
+                
+                const qrcodeDiv = document.createElement('div');
+                qrcodeDiv.id = `qrcode-${i}`;
+                wrapper.appendChild(qrcodeDiv);
+                
+                const label = document.createElement('div');
+                label.className = 'qrcode-label';
+                label.textContent = `Page ${i + 1}/${totalChunks}`;
+                wrapper.appendChild(label);
+
+                const downloadButton = document.createElement('button');
+                downloadButton.className = 'download-button';
+                downloadButton.textContent = 'Télécharger ce QR Code';
+                downloadButton.onclick = () => downloadQRCode(i);
+                wrapper.appendChild(downloadButton);
+                
+                qrcodesContainer.appendChild(wrapper);
+
+                await createQRCode(chunk, qrcodeDiv.id, i, totalChunks, file.name, file.type);
+            }
+
+            loading.style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function hideError() {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.style.display = 'none';
+        }
+
+        function createQRCode(chunk, elementId, index, total, filename, fileType) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = {
+                        index: index + 1,
+                        total: total,
+                        name: filename,
+                        type: fileType,
+                        data: e.target.result,
+                        isDirectDownload: true
+                    };
+
+                    new QRCode(document.getElementById(elementId), {
+                        text: JSON.stringify(data),
+                        width: 400,
+                        height: 400,
+                        correctLevel: QRCode.CorrectLevel.M
+                    });
+                    resolve();
+                };
+                reader.readAsDataURL(chunk);
+            });
+        }
+
+        function downloadQRCode(index) {
+            const canvas = document.querySelector(`#qrcode-${index} canvas`);
+            if (canvas) {
+                const link = document.createElement('a');
+                link.download = `qrcode-page-${index + 1}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }
+        }
+    </script>
+</body>
+</html> 
